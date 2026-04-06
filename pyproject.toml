@@ -1,0 +1,46 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=69"]
+
+[project]
+name = "demo-arrow-flight"
+version = "0.1.0"
+description = "Minimal Apache Arrow Flight demo for sending an OME-Arrow image table."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "demo-arrow-flight maintainers" }]
+dependencies = [
+  "numpy>=1.26",
+  "ome-arrow>=0.0.8,<0.1",
+  "pyarrow>=16.1.0",
+]
+scripts = { demo-arrow-flight = "demo_arrow_flight.cli:main" }
+
+[dependency-groups]
+dev = [
+  "poethepoet>=0.34.0",
+  "pytest>=8.3.0",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.poe.tasks]
+install = "uv sync --all-groups"
+test = "uv run pytest"
+server = "uv run demo-arrow-flight server"
+send = "uv run demo-arrow-flight send"
+receive = "uv run demo-arrow-flight receive"
+demo = "uv run demo-arrow-flight roundtrip-one"
+demo_column = "uv run demo-arrow-flight roundtrip-column --rows 8 --height 32 --width 32 --seed 19"
+parquet_generate = "uv run demo-arrow-flight parquet-generate --output /tmp/random_ome_dataset.parquet --rows 10 --height 64 --width 64 --seed 11"
+parquet_stream = "uv run demo-arrow-flight parquet-stream --parquet-path /tmp/random_ome_dataset.parquet --key random-ome-dataset --batch-rows 3"
+parquet_receive = "uv run demo-arrow-flight parquet-receive --key random-ome-dataset"
+parquet_demo = "uv run demo-arrow-flight parquet-demo --output /tmp/random_ome_dataset.parquet --rows 10 --height 64 --width 64 --seed 11 --batch-rows 3"
