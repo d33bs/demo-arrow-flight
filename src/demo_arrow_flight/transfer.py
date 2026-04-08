@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
-import ome_arrow
 import pyarrow as pa
 import pyarrow.flight as flight
 
@@ -42,9 +40,7 @@ def send_ome_arrow(location: str, key: str, ome_scalar: pa.StructScalar) -> None
     send_table(location=location, key=key, table=table)
 
 
-def receive_ome_arrow(location: str, key: str) -> tuple[pa.StructScalar, np.ndarray]:
-    """Receive OME-Arrow scalar + numpy image array from Flight."""
+def receive_ome_arrow(location: str, key: str) -> pa.StructScalar:
+    """Receive one OME-Arrow scalar from a one-row Flight table."""
     table = receive_table(location=location, key=key)
-    scalar = table["ome_arrow"][0]
-    image = ome_arrow.to_numpy(scalar)
-    return scalar, np.squeeze(image)
+    return table["ome_arrow"][0]

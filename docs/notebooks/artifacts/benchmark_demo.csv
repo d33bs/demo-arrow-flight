@@ -1,0 +1,3 @@
+mode,seconds,rows,throughput_mib_s
+baseline_parquet_read,0.013639,60,150.314477
+flight_stream,0.040909,60,50.114062

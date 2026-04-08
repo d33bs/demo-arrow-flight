@@ -1,5 +1,17 @@
 """demo_arrow_flight package."""
 
+from .benchmarking import (
+    benchmark_baseline_parquet_read,
+    benchmark_flight_table_roundtrip,
+    benchmark_flight_stream,
+    benchmark_parquet_write_read,
+    write_benchmark_csv,
+)
+from .flight_pipeline_demo import (
+    pipeline_consume_from_flight,
+    pipeline_produce_to_flight,
+    pipeline_transform_on_flight,
+)
 from .ome_image import build_demo_ome_arrow, build_demo_image
 from .parquet_stream_demo import (
     build_random_ome_table,
@@ -7,15 +19,25 @@ from .parquet_stream_demo import (
     stream_parquet_in_chunks,
     write_random_ome_parquet,
 )
+from .slurm_simulation import simulate_slurm_parquet_workflow
 from .transfer import receive_ome_arrow, receive_table, send_ome_arrow, send_table
 
 __all__ = [
+    "benchmark_baseline_parquet_read",
+    "benchmark_parquet_write_read",
+    "benchmark_flight_stream",
+    "benchmark_flight_table_roundtrip",
+    "write_benchmark_csv",
+    "pipeline_produce_to_flight",
+    "pipeline_transform_on_flight",
+    "pipeline_consume_from_flight",
     "build_demo_image",
     "build_demo_ome_arrow",
     "build_random_ome_table",
     "write_random_ome_parquet",
     "stream_parquet_in_chunks",
     "receive_streamed_chunks",
+    "simulate_slurm_parquet_workflow",
     "send_ome_arrow",
     "receive_ome_arrow",
     "send_table",

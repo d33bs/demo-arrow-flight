@@ -1,0 +1,3 @@
+mode,seconds,rows,throughput_mib_s
+parquet_write_read,0.246295,60,3.869365
+flight_table_roundtrip,0.016683,60,57.125567

@@ -4,11 +4,10 @@ import socket
 import threading
 import time
 
-import numpy as np
 import pyarrow as pa
 
 from demo_arrow_flight.flight_server import InMemoryFlightServer
-from demo_arrow_flight.ome_image import build_demo_image, build_demo_ome_arrow
+from demo_arrow_flight.ome_image import build_demo_ome_arrow
 from demo_arrow_flight.transfer import (
     receive_ome_arrow,
     receive_table,
@@ -34,13 +33,13 @@ def test_send_receive_roundtrip() -> None:
     time.sleep(0.25)
 
     try:
-        image = build_demo_image(height=20, width=30)
-        payload = build_demo_ome_arrow(image)
+        payload = build_demo_ome_arrow()
 
         send_ome_arrow(location, key, payload)
-        _scalar, restored = receive_ome_arrow(location, key)
-
-        np.testing.assert_array_equal(restored, image)
+        scalar = receive_ome_arrow(location, key)
+        assert scalar.as_py()["name"] == "demo-flight-image"
+        assert scalar.as_py()["pixels_meta"]["size_x"] == 128
+        assert scalar.as_py()["pixels_meta"]["size_y"] == 96
     finally:
         server.shutdown()
         thread.join(timeout=2)
