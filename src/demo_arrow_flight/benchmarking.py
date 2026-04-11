@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import csv
+import shutil
+import tempfile
 import time
 from pathlib import Path
+from statistics import median
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .parquet_stream_demo import receive_streamed_chunks, stream_parquet_in_chunks
-from .transfer import receive_table, send_table
+from .transfer import delete_key, receive_table, send_table
 
 
 def benchmark_baseline_parquet_read(
@@ -63,6 +66,7 @@ def benchmark_flight_stream(
             raise RuntimeError(
                 f"Row mismatch for key={key}: sent={sent_rows}, received={received_rows}"
             )
+        delete_key(location=location, key=key)
         total_rows += received_rows
 
     elapsed = time.perf_counter() - start
@@ -120,6 +124,7 @@ def benchmark_flight_table_roundtrip(
             raise RuntimeError(
                 f"Row mismatch in flight roundtrip: {restored.num_rows} != {table.num_rows}"
             )
+        delete_key(location=location, key=key)
 
     elapsed = time.perf_counter() - start
     logical_mib = (table.nbytes * repeats) / (1024 * 1024)
@@ -144,3 +149,95 @@ def write_benchmark_csv(output_csv: str | Path, rows: list[dict[str, str]]) -> P
         writer.writeheader()
         writer.writerows(rows)
     return path
+
+
+def benchmark_pipeline_file_io(
+    table: pa.Table,
+    batch_rows: int,
+    repeats: int,
+) -> dict[str, float]:
+    """Benchmark many-batch pipeline using parquet intermediate writes."""
+    times: list[float] = []
+    bytes_written: list[int] = []
+    rows = table.num_rows
+
+    for rep in range(repeats):
+        tmp_dir = Path(tempfile.mkdtemp(prefix=f"pipeline-io-{rep}-"))
+        start = time.perf_counter()
+        written = 0
+        try:
+            raw_path = tmp_dir / "raw.parquet"
+            processed_path = tmp_dir / "processed.parquet"
+
+            pq.write_table(table, raw_path)
+            written += raw_path.stat().st_size
+            loaded = pq.read_table(raw_path)
+
+            transformed_batches: list[pa.RecordBatch] = []
+            for batch in loaded.to_batches(max_chunksize=batch_rows):
+                stage = pa.array(["preprocess"] * batch.num_rows)
+                transformed_batches.append(batch.append_column("pipeline_stage", stage))
+
+            transformed = pa.Table.from_batches(transformed_batches)
+            pq.write_table(transformed, processed_path)
+            written += processed_path.stat().st_size
+            final = pq.read_table(processed_path)
+            if final.num_rows != rows:
+                raise RuntimeError(f"Row mismatch in pipeline file mode: {final.num_rows} != {rows}")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        times.append(time.perf_counter() - start)
+        bytes_written.append(written)
+
+    return {
+        "seconds": median(times),
+        "rows": float(rows),
+        "disk_bytes_written": float(median(bytes_written)),
+    }
+
+
+def benchmark_pipeline_flight(
+    location: str,
+    table: pa.Table,
+    batch_rows: int,
+    repeats: int,
+    key_prefix: str,
+) -> dict[str, float]:
+    """Benchmark many-batch pipeline using Flight keys for stage handoff."""
+    times: list[float] = []
+    rows = table.num_rows
+
+    for rep in range(repeats):
+        start = time.perf_counter()
+        raw_key = f"{key_prefix}-raw-{rep}"
+        processed_key = f"{key_prefix}-processed-{rep}"
+
+        send_table(location=location, key=raw_key, table=table, max_chunksize=batch_rows)
+        loaded = receive_table(location=location, key=raw_key)
+        delete_key(location=location, key=raw_key)
+
+        transformed_batches: list[pa.RecordBatch] = []
+        for batch in loaded.to_batches(max_chunksize=batch_rows):
+            stage = pa.array(["preprocess"] * batch.num_rows)
+            transformed_batches.append(batch.append_column("pipeline_stage", stage))
+        transformed = pa.Table.from_batches(transformed_batches)
+
+        send_table(
+            location=location,
+            key=processed_key,
+            table=transformed,
+            max_chunksize=batch_rows,
+        )
+        final = receive_table(location=location, key=processed_key)
+        if final.num_rows != rows:
+            raise RuntimeError(f"Row mismatch in pipeline flight mode: {final.num_rows} != {rows}")
+        delete_key(location=location, key=processed_key)
+
+        times.append(time.perf_counter() - start)
+
+    return {
+        "seconds": median(times),
+        "rows": float(rows),
+        "disk_bytes_written": 0.0,
+    }

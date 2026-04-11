@@ -47,4 +47,5 @@ parquet_demo = "uv run demo-arrow-flight parquet-demo --output /tmp/random_ome_d
 pipeline_demo = "uv run demo-arrow-flight pipeline-demo --rows 10 --height 32 --width 32 --seed 17 --stage-name preprocess"
 benchmark_demo = "uv run demo-arrow-flight benchmark-demo --output /tmp/random_ome_benchmark.parquet --rows 20 --height 64 --width 64 --seed 29 --batch-rows 4 --repeats 3 --output-csv /tmp/demo_arrow_flight_benchmark.csv"
 benchmark_overhead = "uv run demo-arrow-flight benchmark-overhead --rows 320 --height 64 --width 64 --seed 31 --repeats 3 --output-csv /tmp/demo_arrow_flight_overhead.csv"
+benchmark_pipeline_io = "uv run demo-arrow-flight benchmark-pipeline-io --batch-counts 160,320,640,1280,2560,5120 --batch-rows 1 --height 64 --width 64 --seed 41 --repeats 1 --output-csv /tmp/demo_arrow_flight_pipeline_io.csv"
 slurm_simulate = "uv run demo-arrow-flight slurm-simulate --output-dir /tmp/demo_arrow_flight_slurm --rows 10 --height 32 --width 32 --seed 101 --batch-rows 3"

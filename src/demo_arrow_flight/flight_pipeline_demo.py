@@ -6,7 +6,7 @@ import pyarrow as pa
 import pyarrow.flight as flight
 
 from .parquet_stream_demo import build_random_ome_table
-from .transfer import receive_table, send_table
+from .transfer import delete_key, receive_table, send_table
 
 
 def pipeline_produce_to_flight(
@@ -28,12 +28,15 @@ def pipeline_transform_on_flight(
     input_key: str,
     output_key: str,
     stage_name: str = "preprocess",
+    delete_input_key: bool = True,
 ) -> int:
     """Read a Flight table by key, add stage metadata, write to new key."""
     table = receive_table(location=location, key=input_key)
     stage_array = pa.array([stage_name] * table.num_rows)
     transformed = table.append_column("pipeline_stage", stage_array)
     send_table(location=location, key=output_key, table=transformed)
+    if delete_input_key:
+        delete_key(location=location, key=input_key)
     return transformed.num_rows
 
 

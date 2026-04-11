@@ -8,6 +8,8 @@ from demo_arrow_flight.benchmarking import (
     benchmark_baseline_parquet_read,
     benchmark_flight_table_roundtrip,
     benchmark_flight_stream,
+    benchmark_pipeline_file_io,
+    benchmark_pipeline_flight,
     benchmark_parquet_write_read,
     write_benchmark_csv,
 )
@@ -100,6 +102,35 @@ def test_benchmark_overhead_parquet_vs_flight(tmp_path) -> None:
         )
         assert flight_result["rows"] == 32
         assert flight_result["seconds"] >= 0
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_benchmark_pipeline_io_modes() -> None:
+    table = build_random_ome_table(rows=4, height=8, width=8, seed=100)
+    file_result = benchmark_pipeline_file_io(table=table, batch_rows=1, repeats=1)
+    assert file_result["rows"] == 4
+    assert file_result["seconds"] >= 0
+    assert file_result["disk_bytes_written"] > 0
+
+    port = _free_port()
+    location = f"grpc://127.0.0.1:{port}"
+    server = InMemoryFlightServer(location)
+    thread = threading.Thread(target=server.serve, daemon=True)
+    thread.start()
+    time.sleep(0.25)
+    try:
+        flight_result = benchmark_pipeline_flight(
+            location=location,
+            table=table,
+            batch_rows=1,
+            repeats=1,
+            key_prefix="pipeline-io-test",
+        )
+        assert flight_result["rows"] == 4
+        assert flight_result["seconds"] >= 0
+        assert flight_result["disk_bytes_written"] == 0
     finally:
         server.shutdown()
         thread.join(timeout=2)

@@ -10,6 +10,7 @@ from demo_arrow_flight.flight_pipeline_demo import (
     pipeline_transform_on_flight,
 )
 from demo_arrow_flight.flight_server import InMemoryFlightServer
+from demo_arrow_flight.transfer import server_stats
 
 
 def _free_port() -> int:
@@ -47,6 +48,8 @@ def test_pipeline_three_stage_flow() -> None:
         assert transformed_rows == 7
         assert consumed["rows"] == 7
         assert consumed["chunks"] >= 1
+        stats = server_stats(location=location)
+        assert stats["current_keys"] == 1
     finally:
         server.shutdown()
         thread.join(timeout=2)

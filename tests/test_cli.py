@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
+
+UV_BIN = shutil.which("uv") or os.environ.get("UV_BIN") or "/Users/buntend/.local/bin/uv"
 
 
 def test_cli_roundtrip_command() -> None:
     result = subprocess.run(
-        ["uv", "run", "demo-arrow-flight", "roundtrip"],
+        [UV_BIN, "run", "demo-arrow-flight", "roundtrip"],
         capture_output=True,
         text=True,
         check=True,
@@ -16,7 +20,7 @@ def test_cli_roundtrip_command() -> None:
 def test_cli_roundtrip_column_command() -> None:
     result = subprocess.run(
         [
-            "uv",
+            UV_BIN,
             "run",
             "demo-arrow-flight",
             "roundtrip-column",
@@ -39,7 +43,7 @@ def test_cli_roundtrip_column_command() -> None:
 def test_cli_parquet_demo_command() -> None:
     result = subprocess.run(
         [
-            "uv",
+            UV_BIN,
             "run",
             "demo-arrow-flight",
             "parquet-demo",
@@ -66,7 +70,7 @@ def test_cli_parquet_demo_command() -> None:
 def test_cli_pipeline_demo_command() -> None:
     result = subprocess.run(
         [
-            "uv",
+            UV_BIN,
             "run",
             "demo-arrow-flight",
             "pipeline-demo",
@@ -91,7 +95,7 @@ def test_cli_pipeline_demo_command() -> None:
 def test_cli_benchmark_demo_command() -> None:
     result = subprocess.run(
         [
-            "uv",
+            UV_BIN,
             "run",
             "demo-arrow-flight",
             "benchmark-demo",
@@ -122,7 +126,7 @@ def test_cli_benchmark_demo_command() -> None:
 def test_cli_benchmark_overhead_command() -> None:
     result = subprocess.run(
         [
-            "uv",
+            UV_BIN,
             "run",
             "demo-arrow-flight",
             "benchmark-demo",
@@ -150,10 +154,39 @@ def test_cli_benchmark_overhead_command() -> None:
     assert "Benchmark overhead complete" in result.stdout
 
 
+def test_cli_benchmark_pipeline_io_command() -> None:
+    result = subprocess.run(
+        [
+            UV_BIN,
+            "run",
+            "demo-arrow-flight",
+            "benchmark-pipeline-io",
+            "--batch-counts",
+            "2,4",
+            "--batch-rows",
+            "1",
+            "--height",
+            "8",
+            "--width",
+            "8",
+            "--seed",
+            "7",
+            "--repeats",
+            "1",
+            "--output-csv",
+            "/tmp/demo_arrow_flight_pipeline_io_cli_test.csv",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Pipeline I/O benchmark complete" in result.stdout
+
+
 def test_cli_slurm_simulate_command() -> None:
     result = subprocess.run(
         [
-            "uv",
+            UV_BIN,
             "run",
             "demo-arrow-flight",
             "slurm-simulate",

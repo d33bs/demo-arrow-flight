@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Dict
 from urllib.parse import urlparse
 
@@ -16,6 +17,8 @@ class InMemoryFlightServer(flight.FlightServerBase):
         super().__init__(location)
         self._location = location
         self._tables: Dict[str, pa.Table] = {}
+        self._peak_bytes = 0
+        self._peak_keys = 0
 
     @property
     def location(self) -> str:
@@ -43,6 +46,7 @@ class InMemoryFlightServer(flight.FlightServerBase):
             raise ValueError("Cannot store an empty stream.")
 
         self._tables[key] = pa.Table.from_batches(batches)
+        self._update_peaks()
 
     def do_get(
         self,
@@ -93,6 +97,56 @@ class InMemoryFlightServer(flight.FlightServerBase):
                 table.num_rows,
                 table.nbytes,
             )
+
+    def list_actions(self, context):  # type: ignore[override]
+        del context
+        return [
+            flight.ActionType("delete", "Delete a stored table by key."),
+            flight.ActionType("clear", "Clear all stored tables."),
+            flight.ActionType("stats", "Return current and peak memory/key stats."),
+        ]
+
+    def do_action(self, context, action):  # type: ignore[override]
+        del context
+        action_type = action.type
+        body = bytes(action.body).decode("utf-8") if action.body is not None else ""
+
+        if action_type == "delete":
+            if not body:
+                raise ValueError("delete action requires a key body.")
+            existed = body in self._tables
+            if existed:
+                del self._tables[body]
+            payload = {"ok": True, "deleted": body, "existed": existed}
+            yield flight.Result(pa.py_buffer(json.dumps(payload).encode("utf-8")))
+            return
+
+        if action_type == "clear":
+            removed = len(self._tables)
+            self._tables.clear()
+            payload = {"ok": True, "removed": removed}
+            yield flight.Result(pa.py_buffer(json.dumps(payload).encode("utf-8")))
+            return
+
+        if action_type == "stats":
+            payload = self._stats_payload()
+            yield flight.Result(pa.py_buffer(json.dumps(payload).encode("utf-8")))
+            return
+
+        raise KeyError(f"Unsupported action type: {action_type}")
+
+    def _stats_payload(self) -> dict[str, int]:
+        return {
+            "current_keys": len(self._tables),
+            "current_bytes": sum(table.nbytes for table in self._tables.values()),
+            "peak_keys": self._peak_keys,
+            "peak_bytes": self._peak_bytes,
+        }
+
+    def _update_peaks(self) -> None:
+        current = self._stats_payload()
+        self._peak_keys = max(self._peak_keys, current["current_keys"])
+        self._peak_bytes = max(self._peak_bytes, current["current_bytes"])
 
 
 

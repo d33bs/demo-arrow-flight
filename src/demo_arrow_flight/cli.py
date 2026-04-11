@@ -12,6 +12,8 @@ from .benchmarking import (
     benchmark_baseline_parquet_read,
     benchmark_flight_table_roundtrip,
     benchmark_flight_stream,
+    benchmark_pipeline_file_io,
+    benchmark_pipeline_flight,
     benchmark_parquet_write_read,
     write_benchmark_csv,
 )
@@ -29,7 +31,7 @@ from .parquet_stream_demo import (
     write_random_ome_parquet,
 )
 from .slurm_simulation import simulate_slurm_parquet_workflow
-from .transfer import receive_ome_arrow, receive_table, send_ome_arrow, send_table
+from .transfer import clear_keys, receive_ome_arrow, receive_table, send_ome_arrow, send_table
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -200,6 +202,26 @@ def _build_parser() -> argparse.ArgumentParser:
     benchmark_overhead.add_argument("--repeats", type=int, default=3)
     benchmark_overhead.add_argument("--key-prefix", default="benchmark-overhead")
     benchmark_overhead.add_argument("--output-csv", default="")
+
+    benchmark_pipeline = subparsers.add_parser(
+        "benchmark-pipeline-io",
+        help="Scale many-batch pipeline: parquet-intermediate I/O vs Flight in-memory keys.",
+    )
+    benchmark_pipeline.add_argument("--host", default="127.0.0.1")
+    benchmark_pipeline.add_argument(
+        "--batch-counts",
+        default="160,320,640,1280,2560,5120",
+        help="Comma-separated batch counts.",
+    )
+    benchmark_pipeline.add_argument("--batch-rows", type=int, default=1)
+    benchmark_pipeline.add_argument("--height", type=int, default=64)
+    benchmark_pipeline.add_argument("--width", type=int, default=64)
+    benchmark_pipeline.add_argument("--seed", type=int, default=41)
+    benchmark_pipeline.add_argument("--repeats", type=int, default=1)
+    benchmark_pipeline.add_argument(
+        "--output-csv",
+        default="/tmp/demo_arrow_flight_pipeline_io.csv",
+    )
 
     slurm_sim = subparsers.add_parser(
         "slurm-simulate",
@@ -627,6 +649,81 @@ def _run_benchmark_overhead(
     _print_overhead_benchmark_result(parquet_result, flight_result, csv_path)
 
 
+def _parse_batch_counts(batch_counts: str) -> list[int]:
+    values = [x.strip() for x in batch_counts.split(",") if x.strip()]
+    parsed = [int(x) for x in values]
+    if not parsed:
+        raise ValueError("batch-counts cannot be empty")
+    if any(v < 1 for v in parsed):
+        raise ValueError("batch-counts values must be >= 1")
+    return parsed
+
+
+def _run_benchmark_pipeline_io(
+    host: str,
+    batch_counts: str,
+    batch_rows: int,
+    height: int,
+    width: int,
+    seed: int,
+    repeats: int,
+    output_csv: str,
+) -> None:
+    counts = _parse_batch_counts(batch_counts)
+    server, thread, location = _start_local_server(host)
+    csv_rows: list[dict[str, str]] = []
+
+    try:
+        for count in counts:
+            total_rows = count * batch_rows
+            table = build_random_ome_table(
+                rows=total_rows,
+                height=height,
+                width=width,
+                seed=seed,
+            )
+            file_result = benchmark_pipeline_file_io(
+                table=table,
+                batch_rows=batch_rows,
+                repeats=repeats,
+            )
+            clear_keys(location=location)
+            flight_result = benchmark_pipeline_flight(
+                location=location,
+                table=table,
+                batch_rows=batch_rows,
+                repeats=repeats,
+                key_prefix=f"pipeline-io-{count}",
+            )
+            clear_keys(location=location)
+
+            ratio = (
+                file_result["seconds"] / flight_result["seconds"]
+                if flight_result["seconds"] > 0
+                else 0.0
+            )
+            csv_rows.append(
+                {
+                    "batch_count": str(count),
+                    "rows_per_batch": str(batch_rows),
+                    "total_rows": str(total_rows),
+                    "file_seconds": f"{file_result['seconds']:.6f}",
+                    "flight_seconds": f"{flight_result['seconds']:.6f}",
+                    "file_disk_mib": f"{(file_result['disk_bytes_written'] / (1024 * 1024)):.6f}",
+                    "flight_disk_mib": "0.000000",
+                    "file_vs_flight_time_ratio": f"{ratio:.6f}",
+                }
+            )
+
+        write_benchmark_csv(output_csv=output_csv, rows=csv_rows)
+        print(
+            "Pipeline I/O benchmark complete: "
+            f"location={location}, output_csv={output_csv}, batch_counts={counts}"
+        )
+    finally:
+        _stop_local_server(server, thread)
+
+
 def _run_benchmark_demo(
     host: str,
     output: str,
@@ -803,6 +900,17 @@ def main() -> None:
             seed=args.seed,
             repeats=args.repeats,
             key_prefix=args.key_prefix,
+            output_csv=args.output_csv,
+        )
+    elif args.command == "benchmark-pipeline-io":
+        _run_benchmark_pipeline_io(
+            host=args.host,
+            batch_counts=args.batch_counts,
+            batch_rows=args.batch_rows,
+            height=args.height,
+            width=args.width,
+            seed=args.seed,
+            repeats=args.repeats,
             output_csv=args.output_csv,
         )
     elif args.command == "benchmark-demo":

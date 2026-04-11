@@ -89,6 +89,7 @@ Main tasks:
 - `uv run poe pipeline_demo`: one-command produce -> transform -> consume Flight pipeline.
 - `uv run poe benchmark_demo`: local baseline-vs-Flight benchmark and CSV output.
 - `uv run poe benchmark_overhead`: direct parquet write+read vs Flight roundtrip comparison.
+- `uv run poe benchmark_pipeline_io`: many-batch pipeline file-I/O vs Flight in-memory comparison.
 - `uv run poe slurm_simulate`: local Slurm-style simulation with per-job logs.
 
 ## Manual multi-terminal flow
@@ -278,6 +279,24 @@ uv run demo-arrow-flight benchmark-overhead \
   --repeats 3 \
   --output-csv /tmp/demo_arrow_flight_overhead.csv
 ```
+
+Many-batch pipeline I/O benchmark (scales with number of batches):
+
+```bash
+uv run demo-arrow-flight benchmark-pipeline-io \
+  --batch-counts 160,320,640,1280,2560,5120 \
+  --batch-rows 1 \
+  --height 64 \
+  --width 64 \
+  --seed 41 \
+  --repeats 1 \
+  --output-csv /tmp/demo_arrow_flight_pipeline_io.csv
+```
+
+This benchmark compares:
+
+- `file pipeline`: each batch uses parquet intermediate writes/reads between stages
+- `flight pipeline`: stages hand off Arrow tables through Flight keys (no intermediate file writes)
 
 ## Independent demo: Slurm user perspective
 
