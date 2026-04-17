@@ -35,6 +35,7 @@ sequenceDiagram
 - `src/demo_arrow_flight/benchmarking.py`: baseline-vs-Flight benchmark helpers.
 - `src/demo_arrow_flight/slurm_simulation.py`: local Slurm-like staged run helper.
 - `examples/slurm/`: `sbatch` templates for server/sender/receiver, pipeline, and benchmarks.
+- `examples/alpine_benchmark/`: Alpine-targeted Slurm benchmark flow with separate server and client nodes.
 - `docs/notebooks/demo_walkthrough.ipynb`: executed notebook showing high-level demos and outputs.
 - `tests/`: focused tests for payload generation, transfer, and CLI.
 
@@ -91,6 +92,8 @@ Main tasks:
 - `uv run poe benchmark_overhead`: direct parquet write+read vs Flight roundtrip comparison.
 - `uv run poe benchmark_pipeline_io`: many-batch pipeline file-I/O vs Flight in-memory comparison.
 - `uv run poe slurm_simulate`: local Slurm-style simulation with per-job logs.
+- `uv run poe slurm_benchmark_alpine`: submit Alpine benchmark jobs with server/client split across nodes.
+- `uv run poe slurm_benchmark_master`: submit one 2-node Alpine master job that runs all benchmarks.
 
 ## Manual multi-terminal flow
 
@@ -293,6 +296,22 @@ uv run demo-arrow-flight benchmark-pipeline-io \
   --output-csv /tmp/demo_arrow_flight_pipeline_io.csv
 ```
 
+To use an existing Flight server instead of an auto-started local one:
+
+```bash
+uv run demo-arrow-flight benchmark-pipeline-io \
+  --host <server-host> \
+  --port 8815 \
+  --use-existing-server \
+  --batch-counts 160,320,640,1280,2560,5120 \
+  --batch-rows 1 \
+  --height 64 \
+  --width 64 \
+  --seed 41 \
+  --repeats 1 \
+  --output-csv /tmp/demo_arrow_flight_pipeline_io.csv
+```
+
 This benchmark compares:
 
 - `file pipeline`: each batch uses parquet intermediate writes/reads between stages
@@ -318,6 +337,8 @@ Typical usage on a cluster login node:
 cd /path/to/demo-arrow-flight
 HOST=<flight-server-hostname-or-ip> PORT=8815 KEY=slurm-ome-dataset ./examples/slurm/submit_demo.sh
 ```
+
+For Alpine/CURC specifically, see `examples/alpine_benchmark/README.md` for a modular benchmark submission flow that pins the Flight server on one node and submits the benchmark job with `--exclude` to run on a different node.
 
 That script submits:
 

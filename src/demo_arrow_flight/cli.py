@@ -208,6 +208,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Scale many-batch pipeline: parquet-intermediate I/O vs Flight in-memory keys.",
     )
     benchmark_pipeline.add_argument("--host", default="127.0.0.1")
+    benchmark_pipeline.add_argument("--port", type=int, default=8815)
+    benchmark_pipeline.add_argument(
+        "--use-existing-server",
+        action="store_true",
+        help="Use an already running Flight server instead of starting a local one.",
+    )
     benchmark_pipeline.add_argument(
         "--batch-counts",
         default="160,320,640,1280,2560,5120",
@@ -661,6 +667,8 @@ def _parse_batch_counts(batch_counts: str) -> list[int]:
 
 def _run_benchmark_pipeline_io(
     host: str,
+    port: int,
+    use_existing_server: bool,
     batch_counts: str,
     batch_rows: int,
     height: int,
@@ -670,8 +678,13 @@ def _run_benchmark_pipeline_io(
     output_csv: str,
 ) -> None:
     counts = _parse_batch_counts(batch_counts)
-    server, thread, location = _start_local_server(host)
+    location = _location(host, port) if use_existing_server else ""
+    server: InMemoryFlightServer | None = None
+    thread: threading.Thread | None = None
     csv_rows: list[dict[str, str]] = []
+
+    if not use_existing_server:
+        server, thread, location = _start_local_server(host)
 
     try:
         for count in counts:
@@ -721,7 +734,8 @@ def _run_benchmark_pipeline_io(
             f"location={location}, output_csv={output_csv}, batch_counts={counts}"
         )
     finally:
-        _stop_local_server(server, thread)
+        if server is not None and thread is not None:
+            _stop_local_server(server, thread)
 
 
 def _run_benchmark_demo(
@@ -905,6 +919,8 @@ def main() -> None:
     elif args.command == "benchmark-pipeline-io":
         _run_benchmark_pipeline_io(
             host=args.host,
+            port=args.port,
+            use_existing_server=args.use_existing_server,
             batch_counts=args.batch_counts,
             batch_rows=args.batch_rows,
             height=args.height,
